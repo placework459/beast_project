@@ -30,10 +30,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Pytest with converage and html report
+      - name: Run Pytest with coverage and HTML report
         run: |
           mkdir -p reports
-          pytest --cov=tests --cov-report=term --cov-report=html --cov-report=xml --html=reports/report.html --self-contained-html --junitxml=reports/reports.xml --cov-fail-under=85
+          pytest --cov=tests --cov-report=term --cov-report=html --cov-report=xml \
+                 --html=reports/report.html --self-contained-html \
+                 --junitxml=reports/reports.xml --cov-fail-under=85
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -48,7 +50,10 @@ jobs:
           flags: unittests
           fail_ci_if_error: true
           verbose: true
+          # Required if repo is private
+          token: ${{ secrets.CODECOV_TOKEN }}
 
+      # Optional SonarQube scan (uncomment if needed)
       # - name: SonarQube Scan
       #   uses: sonarsource/sonarqube-scan-action@v1
       #   env:
@@ -59,45 +64,34 @@ jobs:
 
       - name: Get Commit hash
         id: vars
-        run: echo "GIT_SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+        run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       - name: Build Docker Image with commit hash
         run: |
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${{ env.GIT_SHA }} \
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${{ steps.vars.outputs.sha }} \
                        -t ${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:latest .
 
       - name: Push Docker Image
         run: |
           echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
-          docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${{ env.GIT_SHA }}
+          docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${{ steps.vars.outputs.sha }}
           docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:latest
 
       - name: Install Git LFS and Push to Hugging Face Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          # Ensure git-lfs is installed (GitHub runners usually have it, but good practice)
           sudo apt-get update
           sudo apt-get install -y git-lfs
-          git lfs install --system # Initialize LFS for the system
+          git lfs install --system
 
-          # The 'actions/checkout' step above has already cloned your repository
-          # and fetched LFS files because of `lfs: true` and `Workspace-depth: 0`.
-
-          # Set up user for potential commits if needed (though direct push might not require a new commit)
           git config user.email "actions@github.com"
           git config user.name "GitHub Actions"
-          
+
           echo "Setting remote for Hugging Face Space"
-          # Add the Hugging Face Space as a remote.
-          # The URL uses oauth2 for token-based authentication.
           git remote add huggingface https://oauth2:${HF_TOKEN}@${HF_SPACE_REPO_URL#https://}
-          
+
           echo "Pushing to Hugging Face Space: ${{ env.HF_SPACE_REPO_URL }}"
-          # Push the main branch to the Hugging Face Space.
-          # --force is used to overwrite the history on the Space, ensuring it matches your GitHub repo.
-          # This should resolve the "shallow update not allowed" because the local repo now has full history.
-          # LFS files will be pushed automatically.
           git push --force huggingface main
-          
+
           echo "Successfully pushed to Hugging Face Space"
