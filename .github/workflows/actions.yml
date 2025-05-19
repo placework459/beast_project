@@ -6,8 +6,8 @@ on:
       - main
 
 env:
-  DOCKER_IMAGE_NAME: mid-program-project-demo
-  HF_SPACE_REPO_URL: https://huggingface.co/spaces/nachikethmurthy666/mid-project-project
+  DOCKER_IMAGE_NAME: namrata
+  HF_SPACE_REPO_URL: https://huggingface.co/spaces/Namratakghodke/nam
 
 jobs:
   build-and-push:
